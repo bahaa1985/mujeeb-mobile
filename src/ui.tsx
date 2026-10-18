@@ -1,6 +1,7 @@
 import React from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,9 +32,15 @@ export function Screen({ children, scroll = true }: React.PropsWithChildren<{ sc
 
 export function PageHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   const colors = useColors();
-  const { direction } = useSettings();
+  const { direction, theme } = useSettings();
   return (
     <View style={styles.pageHeader}>
+      <Image
+        source={theme === 'dark' ? require('@/assets/brand/navbar-dark.png') : require('@/assets/brand/navbar-light.png')}
+        resizeMode="contain"
+        accessibilityLabel="Mujeeb"
+        style={[styles.brandLogo, { alignSelf: direction === 'rtl' ? 'flex-end' : 'flex-start' }]}
+      />
       <Text style={[styles.pageTitle, { color: colors.text, textAlign: direction === 'rtl' ? 'right' : 'left', writingDirection: direction }]}>{title}</Text>
       {subtitle ? <Text style={[styles.subtitle, { color: colors.muted, textAlign: direction === 'rtl' ? 'right' : 'left', writingDirection: direction }]}>{subtitle}</Text> : null}
     </View>
@@ -149,6 +156,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1 },
   content: { width: '100%', maxWidth: 900, alignSelf: 'center', paddingHorizontal: 20, paddingTop: 18, paddingBottom: 32, gap: 18 },
   pageHeader: { gap: 5, marginBottom: 2 },
+  brandLogo: { width: 145, height: 44, marginBottom: 5 },
   pageTitle: { fontSize: 27, fontWeight: '800', letterSpacing: -0.3 },
   subtitle: { fontSize: 14, lineHeight: 20 },
   card: { borderWidth: 1, borderRadius: 12, padding: 16, gap: 14, shadowColor: '#0f172a', shadowOpacity: 0.04, shadowRadius: 8, shadowOffset: { width: 0, height: 2 }, elevation: 1 },

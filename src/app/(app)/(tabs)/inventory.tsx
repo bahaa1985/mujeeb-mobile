@@ -10,10 +10,32 @@ import { errorMessage, inventoryApi } from '@/api';
 import { parseInventorySpreadsheet } from '@/inventory-import';
 import { useAuth } from '@/providers/auth-provider';
 import { useSettings } from '@/providers/settings-provider';
+import type { InventoryItem, InventoryUpdate } from '@/types';
 import { ActionButton, AppText, Card, EmptyState, ErrorBanner, Field, LoadingInline, PageHeader, Screen, useColors } from '@/ui';
 
 type InventoryRow = Record<string, unknown>;
 type StockFilter = 'all' | 'in' | 'out';
+type InventoryDraft = {
+  en_name: string;
+  ar_name: string;
+  active_material: string;
+  dosage_form: string;
+  drug_type: string;
+  price: string;
+  units_count: string;
+  quantity: 0 | 1;
+};
+
+const createInventoryDraft = (item: InventoryItem): InventoryDraft => ({
+  en_name: item.en_name ?? '',
+  ar_name: item.ar_name ?? '',
+  active_material: item.active_material ?? '',
+  dosage_form: item.dosage_form ?? '',
+  drug_type: item.drug_type ?? '',
+  price: item.price === null ? '' : String(item.price),
+  units_count: item.units_count === null ? '' : String(item.units_count),
+  quantity: item.quantity !== null && item.quantity > 0 ? 1 : 0,
+});
 
 export default function InventoryScreen() {
   const { user } = useAuth();
@@ -23,10 +45,13 @@ export default function InventoryScreen() {
   const [fileName, setFileName] = useState('');
   const [rows, setRows] = useState<InventoryRow[]>([]);
   const [error, setError] = useState('');
+  const [editError, setEditError] = useState('');
   const [success, setSuccess] = useState('');
   const [search, setSearch] = useState('');
   const [stock, setStock] = useState<StockFilter>('all');
   const [page, setPage] = useState(1);
+  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [editDraft, setEditDraft] = useState<InventoryDraft | null>(null);
 
   const count = useQuery({
     queryKey: ['inventory-count', user?.pharmacy_id],
@@ -59,6 +84,25 @@ export default function InventoryScreen() {
           ? t('uploadLimit')
           : errorMessage(reason, t('requestFailed')),
       );
+    },
+  });
+
+  const updateItem = useMutation({
+    mutationFn: ({ id, data }: { id: string; data: InventoryUpdate }) => inventoryApi.update(id, data),
+    onSuccess: async () => {
+      setSuccess(t('inventoryItemUpdated'));
+      setError('');
+      setEditError('');
+      setEditingItem(null);
+      setEditDraft(null);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['inventory-count'] }),
+        queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+      ]);
+    },
+    onError: (reason) => {
+      setSuccess('');
+      setEditError(errorMessage(reason, t('requestFailed')));
     },
   });
 
@@ -103,6 +147,41 @@ export default function InventoryScreen() {
   ];
   const inventoryPage = inventory.data;
 
+  const beginEditing = (item: InventoryItem) => {
+    setError('');
+    setEditError('');
+    setSuccess('');
+    setEditingItem(item);
+    setEditDraft(createInventoryDraft(item));
+  };
+
+  const changeDraft = <K extends keyof InventoryDraft>(field: K, value: InventoryDraft[K]) => {
+    setEditDraft((current) => current ? { ...current, [field]: value } : current);
+  };
+
+  const saveInventoryItem = () => {
+    if (!editingItem || !editDraft) return;
+
+    const price = editDraft.price.trim() === '' ? null : Number(editDraft.price);
+    const unitsCount = editDraft.units_count.trim() === '' ? null : Number(editDraft.units_count);
+    if ((price !== null && !Number.isFinite(price)) || (unitsCount !== null && !Number.isFinite(unitsCount))) {
+      setEditError(t('invalidInventoryNumber'));
+      return;
+    }
+
+    const data: InventoryUpdate = {
+      en_name: editDraft.en_name.trim() || null,
+      ar_name: editDraft.ar_name.trim() || null,
+      active_material: editDraft.active_material.trim() || null,
+      dosage_form: editDraft.dosage_form.trim() || null,
+      drug_type: editDraft.drug_type.trim() || null,
+      price,
+      units_count: unitsCount,
+      quantity: editDraft.quantity,
+    };
+    updateItem.mutate({ id: editingItem.id, data });
+  };
+
   return (
     <Screen>
       <PageHeader title={t('inventory')} subtitle={t('uploadSubtitle')} />
@@ -135,7 +214,7 @@ export default function InventoryScreen() {
       </Card>
       <ErrorBanner message={error} />
       {success ? <Text style={{ color: colors.success, fontWeight: '600' }}>{success}</Text> : null}
-      <PageHeader title={t('currentInventory')} />
+      <AppText style={{ fontWeight: '700', fontSize: 17 }}>{t('currentInventory')}</AppText>
       <Field
         label={t('searchInventory')}
         value={search}
@@ -178,10 +257,11 @@ export default function InventoryScreen() {
               {item.en_name && item.ar_name ? <AppText muted>{item.en_name}</AppText> : null}
               {item.active_material ? <AppText muted>{item.active_material}</AppText> : null}
               <View className="flex-row justify-between gap-3">
-                <AppText muted>{t('inStock')}: {item.quantity ?? 0}</AppText>
+                <AppText muted>{item.quantity !== null && item.quantity > 0 ? t('inStock') : t('outOfStock')}</AppText>
                 <AppText muted>{item.price === null ? '—' : `${item.price}`}</AppText>
               </View>
               {item.dosage_form || item.drug_type ? <AppText muted>{[item.dosage_form, item.drug_type].filter(Boolean).join(' · ')}</AppText> : null}
+              <ActionButton title={t('editInventoryItem')} variant="secondary" onPress={() => beginEditing(item)} />
             </Card>
           ))}
           {inventoryPage.meta.lastPage > 1 ? (
@@ -197,6 +277,54 @@ export default function InventoryScreen() {
           ) : null}
         </View>
       ) : <EmptyState title={t('emptyInventory')} />}
+      {editingItem && editDraft ? (
+        <Card>
+          <PageHeader title={`${t('editingInventoryItem')}: ${editingItem.ar_name || editingItem.en_name || editingItem.id}`} />
+          <Field label={t('englishName')} value={editDraft.en_name} onChangeText={(value) => changeDraft('en_name', value)} />
+          <Field label={t('arabicName')} value={editDraft.ar_name} onChangeText={(value) => changeDraft('ar_name', value)} />
+          <Field label={t('activeMaterial')} value={editDraft.active_material} onChangeText={(value) => changeDraft('active_material', value)} />
+          <Field label={t('dosageForm')} value={editDraft.dosage_form} onChangeText={(value) => changeDraft('dosage_form', value)} />
+          <Field label={t('drugType')} value={editDraft.drug_type} onChangeText={(value) => changeDraft('drug_type', value)} />
+          <Field label={t('price')} value={editDraft.price} keyboardType="decimal-pad" onChangeText={(value) => changeDraft('price', value)} />
+          <Field label={t('unitsCount')} value={editDraft.units_count} keyboardType="decimal-pad" onChangeText={(value) => changeDraft('units_count', value)} />
+          <AppText style={{ fontWeight: '700' }}>{t('availability')}</AppText>
+          <ErrorBanner message={editError} />
+          <View className="flex-row gap-2">
+            {([{ value: 1, label: t('inStock') }, { value: 0, label: t('outOfStock') }] as const).map((option) => {
+              const selected = editDraft.quantity === option.value;
+              return (
+                <Pressable
+                  key={option.value}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  onPress={() => changeDraft('quantity', option.value)}
+                  className="flex-1 items-center rounded-lg border px-2 py-3"
+                  style={{
+                    borderColor: selected ? colors.primary : colors.border,
+                    backgroundColor: selected ? colors.primarySoft : colors.surface,
+                  }}
+                >
+                  <Text style={{ color: selected ? colors.primary : colors.text, fontWeight: '600', textAlign: 'center' }}>
+                    {option.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <ActionButton title={t('saveInventoryItem')} onPress={saveInventoryItem} loading={updateItem.isPending} />
+          <ActionButton
+            title={t('cancel')}
+            variant="secondary"
+            disabled={updateItem.isPending}
+            onPress={() => {
+              setEditingItem(null);
+              setEditDraft(null);
+              setError('');
+              setEditError('');
+            }}
+          />
+        </Card>
+      ) : null}
     </Screen>
   );
 }

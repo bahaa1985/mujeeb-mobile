@@ -4,7 +4,9 @@ import { authTokenStorage } from '@/storage';
 import type {
   AppNotification,
   Contact,
+  InventoryItem,
   InventoryPage,
+  InventoryUpdate,
   Message,
   MessagePage,
   NotificationPage,
@@ -110,6 +112,11 @@ export const inventoryApi = {
     (await api.get<InventoryPage>('/inventory', { params })).data,
   upload: async (rows: Record<string, unknown>[], pharmacyId: number) =>
     (await api.post('/inventory/upload', { rows, pharmacy_id: pharmacyId })).data,
+  update: async (id: string, data: InventoryUpdate) =>
+    (await api.patch<{ success: boolean; message: string; data: InventoryItem }>(
+      `/inventory/update/${encodeURIComponent(id)}`,
+      data,
+    )).data,
 };
 
 export const notificationsApi = {

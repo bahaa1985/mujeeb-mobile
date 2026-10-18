@@ -78,6 +78,10 @@ export interface InventoryPage {
   meta: { total: number; page: number; limit: number; lastPage: number };
 }
 
+export type InventoryUpdate = Omit<InventoryItem, 'id' | 'pharmacy_id' | 'quantity'> & {
+  quantity: 0 | 1;
+};
+
 export interface Subscription {
   id: number;
   pharmacy_id: number;

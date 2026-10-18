@@ -36,9 +36,10 @@ if (Platform.OS !== 'web') {
 export default function RootLayout() {
   useEffect(() => {
     if (Platform.OS === 'web') return;
-    void Notifications.setNotificationChannelAsync('default', {
+    void Notifications.setNotificationChannelAsync('notifications_v3', {
       name: 'Notifications',
       importance: Notifications.AndroidImportance.DEFAULT,
+      sound: 'notification_sound',
     });
 
     const receivedSubscription = Notifications.addNotificationReceivedListener(() => {

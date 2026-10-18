@@ -1,6 +1,7 @@
 import { SymbolView, type AndroidSymbol, type SFSymbol } from 'expo-symbols';
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import type { TranslationKey } from '@/i18n';
 import { useSettings } from '@/providers/settings-provider';
@@ -47,6 +48,8 @@ const tabs = [
 export default function TabLayout() {
   const { t, direction } = useSettings();
   const colors = useColors();
+  const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, 8);
 
   return (
     <Tabs
@@ -57,9 +60,9 @@ export default function TabLayout() {
         tabBarStyle: {
           backgroundColor: colors.surface,
           borderTopColor: colors.border,
-          height: 68,
+          height: 68 + bottomInset - 8,
           paddingTop: 7,
-          paddingBottom: 8,
+          paddingBottom: bottomInset,
           direction,
         },
         tabBarLabelStyle: {
