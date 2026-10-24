@@ -5,6 +5,7 @@ import React, { createContext, useCallback, useContext, useEffect, useMemo, useR
 import { Platform } from 'react-native';
 
 import { authApi, setUnauthorizedHandler, usersApi } from '@/api';
+import { requestNotificationPermission } from '@/notifications';
 import { authTokenStorage } from '@/storage';
 import type { User } from '@/types';
 
@@ -21,11 +22,10 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 async function registerDevicePushToken() {
   if (Platform.OS === 'web' || !Device.isDevice) return;
 
-  const currentPermissions = await Notifications.getPermissionsAsync();
-  const permissions = currentPermissions.granted
-    ? currentPermissions
-    : await Notifications.requestPermissionsAsync();
-  if (!permissions.granted) return;
+  if (!(await requestNotificationPermission())) {
+    console.warn('Notification permission was not granted; push token registration was skipped.');
+    return;
+  }
 
   const projectId = Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId;
   if (!projectId) throw new Error('Expo project ID is required to register push notifications.');
@@ -58,7 +58,12 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
         return currentUser;
       })
       .then((currentUser) => {
-        if (mounted && operationId === authOperationId.current) setUser(currentUser);
+        if (mounted && operationId === authOperationId.current) {
+          setUser(currentUser);
+          if (currentUser) {
+            void registerDevicePushToken().catch((error) => console.warn('Push registration failed:', error));
+          }
+        }
       })
       .catch(async () => {
         if (operationId === authOperationId.current) {
@@ -83,7 +88,7 @@ export function AuthProvider({ children }: React.PropsWithChildren) {
       }
       if (operationId === authOperationId.current) {
         setUser(loggedInUser);
-        void registerDevicePushToken().catch((error) => console.warn('Push registration failed:', error));
+        await registerDevicePushToken().catch((error) => console.warn('Push registration failed:', error));
       }
       return loggedInUser;
     } finally {

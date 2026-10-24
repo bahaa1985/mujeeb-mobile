@@ -40,8 +40,11 @@ export default function NotificationsScreen() {
             <Pressable
               key={String(notification.id)}
               onPress={() => {
-                if (notification.type !== 'ORDER_REQUEST') return;
-                const contact = notification.data?.fromNumber ?? notification.data?.from_number;
+                if (notification.type !== 'ORDER_REQUEST' && notification.type !== 'AMBIGUOUS_MESSAGE') return;
+                const contact = notification.data?.contactNumber
+                  ?? notification.data?.fromNumber
+                  ?? notification.data?.from_number
+                  ?? notification.data?.contact_number;
                 router.push({
                   pathname: '/(app)/(tabs)/messages',
                   params: typeof contact === 'string' ? { contactNumber: contact } : {},
